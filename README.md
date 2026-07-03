@@ -29,7 +29,9 @@ Ensure the Go binary directory is on your `PATH` so that `protoc` can find the p
 
 ## Error definition
 
-Define an error enum and configure its default values with options from `errors/errors.proto`. Individual enum values can override the HTTP status code, numeric business code, and message.
+Copy this repository's `errors/errors.proto` into your project's proto include root. For example, if your project root is `<project>`, place the file at `<project>/errors/errors.proto` so that the import below can be resolved with `--proto_path=.`.
+
+Save the following definition as `<project>/api/helloworld/errors.proto`. It configures default values with options from `errors/errors.proto`; individual enum values can override the HTTP status code, numeric business code, and message.
 
 ```proto
 syntax = "proto3";
@@ -60,14 +62,13 @@ enum ErrorReason {
 
 ## Generation
 
-Run `protoc` with the Go generator and this plugin:
+From the `<project>` root, run `protoc` with the Go generator and this plugin:
 
 ```bash
 protoc --proto_path=. \
-  --proto_path=./third_party \
   --go_out=paths=source_relative:. \
   --custom-errors_out=paths=source_relative:. \
-  "${API_PROTO_FILES[@]}"
+  api/helloworld/errors.proto
 ```
 
 ## Generated output
