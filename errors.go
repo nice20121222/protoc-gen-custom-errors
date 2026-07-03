@@ -21,8 +21,24 @@ const (
 
 var enCases = cases.Title(language.AmericanEnglish, cases.NoLower)
 
+type helperRegistry map[protogen.GoImportPath]map[string]helperOrigin
+
+func generateFiles(gen *protogen.Plugin) {
+	registry := make(helperRegistry)
+	for _, file := range gen.Files {
+		if !file.Generate {
+			continue
+		}
+		generateFileWithRegistry(gen, file, registry)
+	}
+}
+
 // generateFile generates a _errors.pb.go file containing kratos errors definitions.
 func generateFile(gen *protogen.Plugin, file *protogen.File) *protogen.GeneratedFile {
+	return generateFileWithRegistry(gen, file, make(helperRegistry))
+}
+
+func generateFileWithRegistry(gen *protogen.Plugin, file *protogen.File, registry helperRegistry) *protogen.GeneratedFile {
 	if len(file.Enums) == 0 {
 		return nil
 	}
@@ -33,12 +49,12 @@ func generateFile(gen *protogen.Plugin, file *protogen.File) *protogen.Generated
 	g.P("package ", file.GoPackageName)
 	g.P()
 	g.Import(fmtPackage)
-	generateFileContent(gen, file, g)
+	generateFileContent(gen, file, g, registry)
 	return g
 }
 
 // generateFileContent generates the kratos errors definitions, excluding the package statement.
-func generateFileContent(gen *protogen.Plugin, file *protogen.File, g *protogen.GeneratedFile) {
+func generateFileContent(gen *protogen.Plugin, file *protogen.File, g *protogen.GeneratedFile, registry helperRegistry) {
 	if len(file.Enums) == 0 {
 		return
 	}
@@ -48,7 +64,11 @@ func generateFileContent(gen *protogen.Plugin, file *protogen.File, g *protogen.
 	g.P("const _ = ", errorsPackage.Ident("SupportPackageIsVersion1"))
 	g.P()
 	index := 0
-	seenCamelValues := make(map[string]helperOrigin)
+	seenCamelValues := registry[file.GoImportPath]
+	if seenCamelValues == nil {
+		seenCamelValues = make(map[string]helperOrigin)
+		registry[file.GoImportPath] = seenCamelValues
+	}
 	for _, enum := range file.Enums {
 		if !genErrorsReason(gen, file, g, enum, seenCamelValues) {
 			index++
@@ -61,11 +81,12 @@ func generateFileContent(gen *protogen.Plugin, file *protogen.File, g *protogen.
 }
 
 type helperOrigin struct {
+	file  string
 	enum  string
 	value string
 }
 
-func genErrorsReason(_ *protogen.Plugin, _ *protogen.File, g *protogen.GeneratedFile, enum *protogen.Enum, seenCamelValues map[string]helperOrigin) bool {
+func genErrorsReason(_ *protogen.Plugin, file *protogen.File, g *protogen.GeneratedFile, enum *protogen.Enum, seenCamelValues map[string]helperOrigin) bool {
 	defaultCode := proto.GetExtension(enum.Desc.Options(), errors.E_DefaultCode)
 	code := 0
 	if ok := defaultCode.(int32); ok != 0 {
@@ -121,9 +142,9 @@ func genErrorsReason(_ *protogen.Plugin, _ *protogen.File, g *protogen.Generated
 		value := string(v.Desc.Name())
 		camelValue := case2Camel(value)
 		if previous, ok := seenCamelValues[camelValue]; ok {
-			panic(fmt.Sprintf("helper name collision: enum '%s' value '%s' and enum '%s' value '%s' both generate '%s'", previous.enum, previous.value, enum.Desc.Name(), value, camelValue))
+			panic(fmt.Sprintf("helper name collision: file '%s' enum '%s' value '%s' and file '%s' enum '%s' value '%s' both generate '%s'", previous.file, previous.enum, previous.value, file.Desc.Path(), enum.Desc.Name(), value, camelValue))
 		}
-		seenCamelValues[camelValue] = helperOrigin{enum: string(enum.Desc.Name()), value: value}
+		seenCamelValues[camelValue] = helperOrigin{file: file.Desc.Path(), enum: string(enum.Desc.Name()), value: value}
 
 		err := &errorInfo{
 			Name:          string(enum.Desc.Name()),

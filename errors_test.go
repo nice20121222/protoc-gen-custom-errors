@@ -90,6 +90,67 @@ func TestGenerateFileRejectsCrossEnumCamelNameCollision(t *testing.T) {
 	}, "message")
 }
 
+func TestGenerateFilesRejectsCrossFileCamelNameCollision(t *testing.T) {
+	defer func() {
+		got := recover()
+		if got == nil {
+			t.Fatal("generateFiles did not panic for helper names colliding across files")
+		}
+		message := fmt.Sprint(got)
+		for _, want := range []string{"first.proto", "FirstReason", "SYSTEM_ERROR", "second.proto", "SecondReason", "SystemError", "collision"} {
+			if !strings.Contains(message, want) {
+				t.Fatalf("panic %q does not contain %q", message, want)
+			}
+		}
+	}()
+	request := &pluginpb.CodeGeneratorRequest{
+		FileToGenerate: []string{"first.proto", "second.proto"},
+		ProtoFile: []*descriptorpb.FileDescriptorProto{
+			testFileDescriptor("first.proto", "FirstReason", "SYSTEM_ERROR", "example.com/shared;sharedpb"),
+			testFileDescriptor("second.proto", "SecondReason", "SystemError", "example.com/shared;sharedpb"),
+		},
+	}
+	gen, err := (protogen.Options{}).New(request)
+	if err != nil {
+		t.Fatalf("create generator: %v", err)
+	}
+	generateFiles(gen)
+}
+
+func TestGenerateFilesAllowsSameHelperNameInDifferentGoPackages(t *testing.T) {
+	request := &pluginpb.CodeGeneratorRequest{
+		FileToGenerate: []string{"first.proto", "second.proto"},
+		ProtoFile: []*descriptorpb.FileDescriptorProto{
+			testFileDescriptor("first.proto", "FirstReason", "SYSTEM_ERROR", "example.com/first;firstpb"),
+			testFileDescriptor("second.proto", "SecondReason", "SystemError", "example.com/second;secondpb"),
+		},
+	}
+	gen, err := (protogen.Options{}).New(request)
+	if err != nil {
+		t.Fatalf("create generator: %v", err)
+	}
+	generateFiles(gen)
+}
+
+func testFileDescriptor(filename, enumName, valueName, goPackage string) *descriptorpb.FileDescriptorProto {
+	enumOptions := &descriptorpb.EnumOptions{}
+	proto.SetExtension(enumOptions, errorspb.E_DefaultCode, int32(500))
+	return &descriptorpb.FileDescriptorProto{
+		Name:    proto.String(filename),
+		Package: proto.String(strings.TrimSuffix(filename, ".proto")),
+		Syntax:  proto.String("proto3"),
+		Options: &descriptorpb.FileOptions{GoPackage: proto.String(goPackage)},
+		EnumType: []*descriptorpb.EnumDescriptorProto{{
+			Name:    proto.String(enumName),
+			Options: enumOptions,
+			Value: []*descriptorpb.EnumValueDescriptorProto{{
+				Name:   proto.String(valueName),
+				Number: proto.Int32(0),
+			}},
+		}},
+	}
+}
+
 type testEnum struct {
 	name       string
 	valueNames []string
