@@ -48,8 +48,9 @@ func generateFileContent(gen *protogen.Plugin, file *protogen.File, g *protogen.
 	g.P("const _ = ", errorsPackage.Ident("SupportPackageIsVersion1"))
 	g.P()
 	index := 0
+	seenCamelValues := make(map[string]helperOrigin)
 	for _, enum := range file.Enums {
-		if !genErrorsReason(gen, file, g, enum) {
+		if !genErrorsReason(gen, file, g, enum, seenCamelValues) {
 			index++
 		}
 	}
@@ -59,7 +60,12 @@ func generateFileContent(gen *protogen.Plugin, file *protogen.File, g *protogen.
 	}
 }
 
-func genErrorsReason(_ *protogen.Plugin, _ *protogen.File, g *protogen.GeneratedFile, enum *protogen.Enum) bool {
+type helperOrigin struct {
+	enum  string
+	value string
+}
+
+func genErrorsReason(_ *protogen.Plugin, _ *protogen.File, g *protogen.GeneratedFile, enum *protogen.Enum, seenCamelValues map[string]helperOrigin) bool {
 	defaultCode := proto.GetExtension(enum.Desc.Options(), errors.E_DefaultCode)
 	code := 0
 	if ok := defaultCode.(int32); ok != 0 {
@@ -81,7 +87,6 @@ func genErrorsReason(_ *protogen.Plugin, _ *protogen.File, g *protogen.Generated
 	}
 
 	var ew errorWrapper
-	seenCamelValues := make(map[string]string)
 	for _, v := range enum.Values {
 		enumNumCode := numCode
 		enumCode := code
@@ -116,9 +121,9 @@ func genErrorsReason(_ *protogen.Plugin, _ *protogen.File, g *protogen.Generated
 		value := string(v.Desc.Name())
 		camelValue := case2Camel(value)
 		if previous, ok := seenCamelValues[camelValue]; ok {
-			panic(fmt.Sprintf("helper name collision in enum '%s': values '%s' and '%s' both generate '%s'", enum.Desc.Name(), previous, value, camelValue))
+			panic(fmt.Sprintf("helper name collision: enum '%s' value '%s' and enum '%s' value '%s' both generate '%s'", previous.enum, previous.value, enum.Desc.Name(), value, camelValue))
 		}
-		seenCamelValues[camelValue] = value
+		seenCamelValues[camelValue] = helperOrigin{enum: string(enum.Desc.Name()), value: value}
 
 		err := &errorInfo{
 			Name:          string(enum.Desc.Name()),

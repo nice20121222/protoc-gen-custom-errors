@@ -71,30 +71,63 @@ func TestGenerateFileRejectsCamelNameCollision(t *testing.T) {
 	generateTestSource(t, []string{"FOO_BAR", "FooBar"}, "message")
 }
 
+func TestGenerateFileRejectsCrossEnumCamelNameCollision(t *testing.T) {
+	defer func() {
+		got := recover()
+		if got == nil {
+			t.Fatal("generateFile did not panic for helper names colliding across enums")
+		}
+		message := fmt.Sprint(got)
+		for _, want := range []string{"FirstReason", "SecondReason", "SystemError", "collision"} {
+			if !strings.Contains(message, want) {
+				t.Fatalf("panic %q does not contain %q", message, want)
+			}
+		}
+	}()
+	generateTestSourceForEnums(t, []testEnum{
+		{name: "FirstReason", valueNames: []string{"SYSTEM_ERROR"}},
+		{name: "SecondReason", valueNames: []string{"SystemError"}},
+	}, "message")
+}
+
+type testEnum struct {
+	name       string
+	valueNames []string
+}
+
 func generateTestSource(t *testing.T, valueNames []string, message string) string {
 	t.Helper()
-	enumOptions := &descriptorpb.EnumOptions{}
-	proto.SetExtension(enumOptions, errorspb.E_DefaultCode, int32(500))
-	proto.SetExtension(enumOptions, errorspb.E_DefaultMessage, message)
-	values := make([]*descriptorpb.EnumValueDescriptorProto, 0, len(valueNames))
-	for i, name := range valueNames {
-		values = append(values, &descriptorpb.EnumValueDescriptorProto{
-			Name:   proto.String(name),
-			Number: proto.Int32(int32(i)),
+	return generateTestSourceForEnums(t, []testEnum{{name: "ErrorReason", valueNames: valueNames}}, message)
+}
+
+func generateTestSourceForEnums(t *testing.T, enumSpecs []testEnum, message string) string {
+	t.Helper()
+	enums := make([]*descriptorpb.EnumDescriptorProto, 0, len(enumSpecs))
+	for _, enumSpec := range enumSpecs {
+		enumOptions := &descriptorpb.EnumOptions{}
+		proto.SetExtension(enumOptions, errorspb.E_DefaultCode, int32(500))
+		proto.SetExtension(enumOptions, errorspb.E_DefaultMessage, message)
+		values := make([]*descriptorpb.EnumValueDescriptorProto, 0, len(enumSpec.valueNames))
+		for i, name := range enumSpec.valueNames {
+			values = append(values, &descriptorpb.EnumValueDescriptorProto{
+				Name:   proto.String(name),
+				Number: proto.Int32(int32(i)),
+			})
+		}
+		enums = append(enums, &descriptorpb.EnumDescriptorProto{
+			Name:    proto.String(enumSpec.name),
+			Options: enumOptions,
+			Value:   values,
 		})
 	}
 	request := &pluginpb.CodeGeneratorRequest{
 		FileToGenerate: []string{"test.proto"},
 		ProtoFile: []*descriptorpb.FileDescriptorProto{{
-			Name:    proto.String("test.proto"),
-			Package: proto.String("test"),
-			Syntax:  proto.String("proto3"),
-			Options: &descriptorpb.FileOptions{GoPackage: proto.String("example.com/test;testpb")},
-			EnumType: []*descriptorpb.EnumDescriptorProto{{
-				Name:    proto.String("ErrorReason"),
-				Options: enumOptions,
-				Value:   values,
-			}},
+			Name:     proto.String("test.proto"),
+			Package:  proto.String("test"),
+			Syntax:   proto.String("proto3"),
+			Options:  &descriptorpb.FileOptions{GoPackage: proto.String("example.com/test;testpb")},
+			EnumType: enums,
 		}},
 	}
 	gen, err := (protogen.Options{}).New(request)
