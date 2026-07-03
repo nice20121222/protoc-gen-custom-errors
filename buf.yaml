@@ -1,5 +1,5 @@
 version: v2
-name: buf.build/go-kratos/protoc-gen-go-errors
+name: buf.build/nice20121222/protoc-gen-custom-errors
 lint:
   use:
     - DEFAULT
