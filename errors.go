@@ -32,7 +32,7 @@ func generateFile(gen *protogen.Plugin, file *protogen.File) *protogen.Generated
 	g.P()
 	g.P("package ", file.GoPackageName)
 	g.P()
-	g.QualifiedGoIdent(fmtPackage.Ident(""))
+	g.Import(fmtPackage)
 	generateFileContent(gen, file, g)
 	return g
 }
@@ -81,6 +81,7 @@ func genErrorsReason(_ *protogen.Plugin, _ *protogen.File, g *protogen.Generated
 	}
 
 	var ew errorWrapper
+	seenCamelValues := make(map[string]string)
 	for _, v := range enum.Values {
 		enumNumCode := numCode
 		enumCode := code
@@ -112,16 +113,23 @@ func genErrorsReason(_ *protogen.Plugin, _ *protogen.File, g *protogen.Generated
 		if comment == "" {
 			comment = v.Comments.Trailing.String()
 		}
+		value := string(v.Desc.Name())
+		camelValue := case2Camel(value)
+		if previous, ok := seenCamelValues[camelValue]; ok {
+			panic(fmt.Sprintf("helper name collision in enum '%s': values '%s' and '%s' both generate '%s'", enum.Desc.Name(), previous, value, camelValue))
+		}
+		seenCamelValues[camelValue] = value
 
 		err := &errorInfo{
-			Name:       string(enum.Desc.Name()),
-			Value:      string(v.Desc.Name()),
-			CamelValue: case2Camel(string(v.Desc.Name())),
-			HTTPCode:   enumCode,
-			Comment:    comment,
-			HasComment: len(comment) > 0,
-			Message:    enumMessage,
-			NumCode:    strconv.Itoa(enumNumCode),
+			Name:          string(enum.Desc.Name()),
+			Value:         value,
+			CamelValue:    camelValue,
+			HTTPCode:      enumCode,
+			Comment:       comment,
+			HasComment:    len(comment) > 0,
+			Message:       enumMessage,
+			QuotedMessage: strconv.Quote(enumMessage),
+			NumCode:       strconv.Itoa(enumNumCode),
 		}
 		ew.Errors = append(ew.Errors, err)
 	}
