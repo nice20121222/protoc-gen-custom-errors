@@ -62,12 +62,12 @@ enum ErrorReason {
 
 Run `protoc` with the Go generator and this plugin:
 
-```sh
+```bash
 protoc --proto_path=. \
   --proto_path=./third_party \
   --go_out=paths=source_relative:. \
   --custom-errors_out=paths=source_relative:. \
-  $(API_PROTO_FILES)
+  "${API_PROTO_FILES[@]}"
 ```
 
 ## Generated output
