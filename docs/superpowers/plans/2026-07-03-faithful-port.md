@@ -198,7 +198,7 @@ Run: `rg -n -i 'sun''seed' .`
 
 Expected: no output and exit status 1. Adjacent shell strings form the legacy brand search token without storing that token in the repository.
 
-Run: `rg -n 'protoc-gen-go-errors|sun''seed-errors_out|sun''seed-errors' README.md *.go errorsTemplate.tpl go.mod buf*.yaml`
+Run: `rg -n 'protoc-gen-go-''errors|sun''seed-errors_out|sun''seed-errors' README.md *.go errorsTemplate.tpl go.mod buf*.yaml`
 
 Expected: no output and exit status 1.
 
