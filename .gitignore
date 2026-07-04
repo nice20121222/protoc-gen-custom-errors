@@ -37,3 +37,4 @@ bin/
 config/
 
 *openapi.yaml
+docs/
